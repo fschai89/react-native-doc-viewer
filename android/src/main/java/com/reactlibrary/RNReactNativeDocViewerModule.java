@@ -260,7 +260,7 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
     private static String getMimeType(String url) {
         String mimeType = null;
         System.out.println("Url: " + url);
-        String extension = MimeTypeMap.getFileExtensionFromUrl(url);
+        String extension = MimeTypeMap.getFileExtensionFromUrl(Uri.encode(url));
         if (extension != null) {
             mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
         }
