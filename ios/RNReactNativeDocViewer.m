@@ -37,29 +37,36 @@ RCT_EXPORT_METHOD(testModule:(NSString *)name location:(NSString *)location)
  */
 RCT_EXPORT_METHOD(openDoc:(NSArray *)array callback:(RCTResponseSenderBlock)callback)
 {
-    
+
     __weak RNReactNativeDocViewer* weakSelf = self;
     dispatch_queue_t asyncQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
     dispatch_async(asyncQueue, ^{
         NSDictionary* dict = [array objectAtIndex:0];
         NSString* urlStr = dict[@"url"];
-        NSString* filename = dict[@"fileName"];
+        NSString* fileNameOptional = dict[@"fileNameOptional"];
         NSURL* url = [NSURL URLWithString:[urlStr stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
         NSData* dat = [NSData dataWithContentsOfURL:url];
         RCTLogInfo(@"Url %@", url);
+        RCTLogInfo(@"FileNameOptional %@", fileNameOptional);
+        NSArray *parts = [urlStr componentsSeparatedByString:@"/"];
+        NSString *fileNameExported = [parts lastObject];
+        //Custom Filename
+        NSString *fileName = @"";
+        if([fileNameOptional length] > 0){
+            NSString* fileExt = [fileNameExported pathExtension];
+            fileName = [NSString stringWithFormat:@"%@%c%@", fileNameOptional , '.', fileExt];
+        }else{
+            //get File Name example a.pdf from Url http://xyz/a.pdf
+            fileName = [NSString stringWithFormat:@"%@", fileNameExported];
+        }
+        
         //From the www
-        if ([urlStr containsString:@"http"]) {
+        if ([urlStr containsString:@"http"] || [urlStr containsString:@"https"]) {
             if (dat == nil) {
                 if (callback) {
                     callback(@[[NSNull null], @"Doc Url not found"]);
                 }
                 return;
-            }
-            NSString* fileName = [url lastPathComponent];
-            NSString* fileExt = [fileName pathExtension];
-            RCTLogInfo(@"Pretending to create an event at %@", fileExt);
-            if([fileExt length] == 0){
-                fileName = [NSString stringWithFormat:@"%@%@", fileName, @".pdf"];
             }
 
             NSString* path = [NSTemporaryDirectory() stringByAppendingPathComponent: fileName];
@@ -67,19 +74,11 @@ RCT_EXPORT_METHOD(openDoc:(NSArray *)array callback:(RCTResponseSenderBlock)call
             [dat writeToURL:tmpFileUrl atomically:YES];
             weakSelf.fileUrl = tmpFileUrl;
         } else {
-            //Local File
-            NSString* fileName = [url lastPathComponent];
-            NSString* fileExt = [fileName pathExtension];
-            //NSString* fileName = [NSString stringWithFormat:@"%@%@%@", fileName, @".", filetype];
-            RCTLogInfo(@"Pretending to create an event at %@", fileExt);
-            if([fileExt length] == 0){
-                fileName = [NSString stringWithFormat:@"%@%@", fileName, @".pdf"];
-            }
             NSURL* tmpFileUrl = [[NSURL alloc] initFileURLWithPath:urlStr];
             weakSelf.fileUrl = tmpFileUrl;
         }
-    
-        
+
+
         dispatch_async(dispatch_get_main_queue(), ^{
             QLPreviewController* cntr = [[QLPreviewController alloc] init];
             cntr.delegate = weakSelf;
@@ -89,11 +88,11 @@ RCT_EXPORT_METHOD(openDoc:(NSArray *)array callback:(RCTResponseSenderBlock)call
             }
             UIViewController* root = [[[UIApplication sharedApplication] keyWindow] rootViewController];
             while (root.presentedViewController) {
-                root = root.presentedViewController;
+                root = [root presentedViewController];
             }
             [root presentViewController:cntr animated:YES completion:nil];
         });
-        
+
     });
 }
 
@@ -135,7 +134,7 @@ RCT_EXPORT_METHOD(openDocBinaryinUrl:(NSArray *)array callback:(RCTResponseSende
 
         [dat writeToURL:tmpFileUrl atomically:YES];
         weakSelf.fileUrl = tmpFileUrl;
-        
+
         dispatch_async(dispatch_get_main_queue(), ^{
             QLPreviewController* cntr = [[QLPreviewController alloc] init];
             cntr.delegate = weakSelf;
@@ -145,11 +144,11 @@ RCT_EXPORT_METHOD(openDocBinaryinUrl:(NSArray *)array callback:(RCTResponseSende
             }
             UIViewController* root = [[[UIApplication sharedApplication] keyWindow] rootViewController];
             while (root.presentedViewController) {
-                root = root.presentedViewController;
+                root = [root presentedViewController];
             }
             [root presentViewController:cntr animated:YES completion:nil];
         });
-        
+
     });
 }
 
@@ -160,7 +159,7 @@ RCT_EXPORT_METHOD(openDocBinaryinUrl:(NSArray *)array callback:(RCTResponseSende
  */
 RCT_EXPORT_METHOD(openDocb64:(NSArray *)array callback:(RCTResponseSenderBlock)callback)
 {
-    
+
     __weak RNReactNativeDocViewer* weakSelf = self;
     dispatch_queue_t asyncQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
     dispatch_async(asyncQueue, ^{
@@ -186,7 +185,7 @@ RCT_EXPORT_METHOD(openDocb64:(NSArray *)array callback:(RCTResponseSenderBlock)c
 
         [dat writeToURL:tmpFileUrl atomically:YES];
         weakSelf.fileUrl = tmpFileUrl;
-        
+
         dispatch_async(dispatch_get_main_queue(), ^{
             QLPreviewController* cntr = [[QLPreviewController alloc] init];
             cntr.delegate = weakSelf;
@@ -196,11 +195,11 @@ RCT_EXPORT_METHOD(openDocb64:(NSArray *)array callback:(RCTResponseSenderBlock)c
             }
             UIViewController* root = [[[UIApplication sharedApplication] keyWindow] rootViewController];
             while (root.presentedViewController) {
-                root = root.presentedViewController;
+                root = [root presentedViewController];
             }
             [root presentViewController:cntr animated:YES completion:nil];
         });
-        
+
     });
 }
 
@@ -208,39 +207,39 @@ RCT_EXPORT_METHOD(openDocb64:(NSArray *)array callback:(RCTResponseSenderBlock)c
 //Movie Files mp4
 RCT_EXPORT_METHOD(playMovie:(NSString *)file callback:(RCTResponseSenderBlock)callback)
 {
-  //NSDictionary* dict = [array objectAtIndex:0];
-  NSString *_uri = file;
-
-  NSString* mediaFilePath = [[NSBundle mainBundle] pathForResource:_uri ofType:nil];
-  NSAssert(mediaFilePath, @"Media not found: %@", _uri);
-
-  NSURL *fileURL = [NSURL fileURLWithPath:mediaFilePath];
-
-  dispatch_async(dispatch_get_main_queue(), ^{
-
-    AVPlayerViewController *movieViewController = [[AVPlayerViewController alloc] init];
-
-    movieViewController.player = [AVPlayer playerWithURL:fileURL];
-
-    [movieViewController.player play];
-
-    movieViewController = movieViewController;
-
-    UIViewController *ctrl = [[[[UIApplication sharedApplication] delegate] window] rootViewController];
-    while (ctrl.presentedViewController) {
-        ctrl = ctrl.presentedViewController;
-    }
+    //NSDictionary* dict = [array objectAtIndex:0];
+    NSString *_uri = file;
     
-    UIView *view = [ctrl view];
-
-    view.window.windowLevel = UIWindowLevelStatusBar;
-      if (callback) {
-          callback(@[[NSNull null], @"true"]);
-      }
-
-    [ctrl presentViewController:movieViewController animated:TRUE completion: nil];
-
-  });
+    
+    NSURL *fileURL = nil;
+    if ([_uri containsString:@"http"] || [_uri containsString:@"https"]) {
+        fileURL = [NSURL URLWithString:_uri];
+    }else{
+        NSString* mediaFilePath = [[NSBundle mainBundle] pathForResource:_uri ofType:nil];
+        NSAssert(mediaFilePath, @"Media not found: %@", _uri);
+        fileURL = [NSURL fileURLWithPath:mediaFilePath];
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        
+        AVPlayerViewController *movieViewController = [[AVPlayerViewController alloc] init];
+        
+        movieViewController.player = [AVPlayer playerWithURL:fileURL];
+        
+        [movieViewController.player play];
+        
+        movieViewController = movieViewController;
+        
+        UIViewController *ctrl = [[[[UIApplication sharedApplication] delegate] window] rootViewController];
+        UIView *view = [ctrl view];
+        
+        view.window.windowLevel = UIWindowLevelStatusBar;
+        if (callback) {
+            callback(@[[NSNull null], @"true"]);
+        }
+        
+        [ctrl presentViewController:movieViewController animated:TRUE completion: nil];
+        
+    });
 }
 
 - (NSInteger) numberOfPreviewItemsInPreviewController: (QLPreviewController *) controller
@@ -263,4 +262,3 @@ RCT_EXPORT_METHOD(playMovie:(NSString *)file callback:(RCTResponseSenderBlock)ca
 
 
 @end
-  

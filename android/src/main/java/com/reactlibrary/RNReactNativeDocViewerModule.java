@@ -68,8 +68,11 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             // parameter parsing
             final String url = arg_object.getString("url");
             final String fileName =arg_object.getString("fileName");
+            final String fileType =arg_object.getString("fileType");
+            final Boolean cache =arg_object.getBoolean("cache");
+            final byte[] bytesData = new byte[0]; 
             // Begin the Download Task
-            new FileDownloaderAsyncTask(callback, url, fileName).execute();
+            new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
         }else{
             callback.invoke(false);
         }
@@ -88,8 +91,35 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             final String base64 = arg_object.getString("base64");
             final String fileName =arg_object.getString("fileName");
             final String fileType =arg_object.getString("fileType");
+            final Boolean cache = arg_object.getBoolean("cache");
+            //Bytes
+            final byte[] bytesData = android.util.Base64.decode(base64,android.util.Base64.DEFAULT);
+            System.out.println("BytesData" + bytesData);
             // Begin the Download Task
-            //new FileDownloaderAsyncTask(callback, url, fileName).execute();
+            new FileDownloaderAsyncTask(callback, "", cache, fileName, fileType, bytesData).execute();
+        }else{
+            callback.invoke(false);
+        }
+       } catch (Exception e) {
+            callback.invoke(e.getMessage());
+       }
+
+       
+  }
+
+  @ReactMethod
+  public void openDocBinaryinUrl(ReadableArray args, Callback callback) {
+      final ReadableMap arg_object = args.getMap(0);
+      try {
+        if (arg_object.getString("url") != null && arg_object.getString("fileName") != null && arg_object.getString("fileType") != null) {
+            // parameter parsing
+            final String url = arg_object.getString("url");
+            final String fileName =arg_object.getString("fileName");
+            final String fileType =arg_object.getString("fileType");
+            final Boolean cache =arg_object.getBoolean("cache");
+            final byte[] bytesData = new byte[0]; 
+            // Begin the Download Task
+            new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
         }else{
             callback.invoke(false);
         }
@@ -106,56 +136,109 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
      * @param url
      * @return
      */
-    private File downloadFile(String url, Callback callback) {
+    private File downloadFile(String url, String fileName, Boolean cache, String fileType, byte[] bytesData, Callback callback) {
 
         try {
-            // get an instance of a cookie manager since it has access to our
-            // auth cookie
-            CookieManager cookieManager = CookieManager.getInstance();
-
-            // get the cookie string for the site.
-            String auth = null;
-            if (cookieManager.getCookie(url) != null) {
-                auth = cookieManager.getCookie(url).toString();
-            }
-
-            URL url2 = new URL(url);
-            HttpURLConnection conn = (HttpURLConnection) url2.openConnection();
-            if (auth != null) {
-                conn.setRequestProperty("Cookie", auth);
-            }
-
-            InputStream reader = conn.getInputStream();
-
-            String extension = MimeTypeMap.getFileExtensionFromUrl(url);
-            if (extension.equals("")) {
-                extension = "pdf";
-                System.out.println("extension (default): " + extension);
-            }
-
             Context context = getReactApplicationContext().getBaseContext();
             File outputDir = context.getCacheDir();
-            File f = File.createTempFile(FILE_TYPE_PREFIX, "." + extension,
-                    outputDir);
-            // make sure the receiving app can read this file
-            f.setReadable(true, false);
-            System.out.println(f.getPath());
-            FileOutputStream outStream = new FileOutputStream(f);
+            if(bytesData.length > 0){
+                // use cache
+                File f = cache != null && cache ? new File(outputDir, fileName) : File.createTempFile(FILE_TYPE_PREFIX, "." + fileType,
+                        outputDir);
+                System.out.println("Bytes will be creating a file");
+                final FileOutputStream fileOutputStream;
+                try {
+                    fileOutputStream = new FileOutputStream(f);
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                    return null;
+                }
 
-            byte[] buffer = new byte[1024];
-            int readBytes = reader.read(buffer);
-            while (readBytes > 0) {
-                outStream.write(buffer, 0, readBytes);
-                readBytes = reader.read(buffer);
+                final BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(
+                        fileOutputStream);
+                try {
+                    bufferedOutputStream.write(bytesData);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    return null;
+                } finally {
+                    try {
+                        bufferedOutputStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+                return f;
+            }else{
+                String extension = MimeTypeMap.getFileExtensionFromUrl(url);
+                System.out.println("Extensions DownloadFile " + extension);
+                if (extension.equals("") && fileType.equals("")) {
+                    extension = "pdf";
+                    System.out.println("extension (default): " + extension);
+                }
+
+                if (fileType != "" && extension.equals("")) {
+                    extension = fileType;
+                    System.out.println("extension (default): " + extension);
+                }
+
+                 // check has extension
+                if (fileName.indexOf("\\.") == -1){
+                    fileName = fileName + '.' + extension;
+                }
+                // if use cache, check exist
+                if (cache != null && cache) {
+                    File existFile = new File(outputDir, fileName);
+                    if (existFile.exists()){
+                        return existFile;
+                    }
+                }
+
+                // get an instance of a cookie manager since it has access to our
+                // auth cookie
+                CookieManager cookieManager = CookieManager.getInstance();
+
+                // get the cookie string for the site.
+                String auth = null;
+                if (cookieManager.getCookie(url) != null) {
+                    auth = cookieManager.getCookie(url).toString();
+                }
+
+                URL url2 = new URL(url);
+                HttpURLConnection conn = (HttpURLConnection) url2.openConnection();
+                if (auth != null) {
+                    conn.setRequestProperty("Cookie", auth);
+                }
+
+                InputStream reader = conn.getInputStream();
+
+                // use cache
+                File f = cache != null && cache ? new File(outputDir, fileName) : File.createTempFile(FILE_TYPE_PREFIX, "." + extension,
+                        outputDir);
+            
+                // make sure the receiving app can read this file
+                f.setReadable(true, false);
+                System.out.println(f.getPath());
+                FileOutputStream outStream = new FileOutputStream(f);
+
+                byte[] buffer = new byte[1024];
+                int readBytes = reader.read(buffer);
+                while (readBytes > 0) {
+                    outStream.write(buffer, 0, readBytes);
+                    readBytes = reader.read(buffer);
+                }
+                reader.close();
+                outStream.close();
+                if (f.exists()) {
+                    System.out.println("File exists");
+                } else {
+                    System.out.println("File doesn't exist");
+                }
+                return f;
             }
-            reader.close();
-            outStream.close();
-            if (f.exists()) {
-                System.out.println("File exists");
-            } else {
-                System.out.println("File doesn't exist");
-            }
-            return f;
+
+           
+           
 
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -176,14 +259,11 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
      */
     private static String getMimeType(String url) {
         String mimeType = null;
-
-        String extension = MimeTypeMap.getFileExtensionFromUrl(Uri.encode(url));
+        System.out.println("Url: " + url);
+        String extension = MimeTypeMap.getFileExtensionFromUrl(url);
         if (extension != null) {
-            MimeTypeMap mime = MimeTypeMap.getSingleton();
-            mimeType = mime.getMimeTypeFromExtension(extension);
+            mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
         }
-
-        System.out.println("Mime Type: " + mimeType);
 
         if (mimeType == null) {
             mimeType = "application/pdf";
@@ -197,19 +277,26 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
         private final Callback callback;
         private final String url;
         private final String fileName;
+        private final Boolean cache; 
+        private final String fileType;
+        private final byte[] bytesData;
 
         public FileDownloaderAsyncTask(Callback callback,
-                String url, String fileName) {
+                String url, Boolean cache, String fileName, String fileType, byte[] bytesData) {
             super();
             this.callback = callback;
             this.url = url;
             this.fileName = fileName;
+            this.cache = cache;
+            this.fileType = fileType;
+            this.bytesData = bytesData;
         }
 
         @Override
         protected File doInBackground(Void... arg0) {
             if (!url.startsWith("file://")) {
-                return downloadFile(url, callback);
+                System.out.println("Url to download" +url);
+                return downloadFile(url, fileName, cache, fileType, bytesData, callback);
             } else {
                 File file = new File(url.replace("file://", ""));
                 return file;
@@ -224,9 +311,13 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             }
 
             Context context = getCurrentActivity();
-
+           String mimeType;
             // mime type of file data
-            String mimeType = getMimeType(url);
+            if (fileName != null && fileType != null) {
+               mimeType = getMimeType(fileName + "." +fileType);
+            } else {
+              mimeType = getMimeType(url);
+            }
             if (mimeType == null || context == null) {
                 return;
             }
